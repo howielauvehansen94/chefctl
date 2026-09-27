@@ -1,9 +1,3 @@
-# chefctl command-line interface: flag parsing, config resolution, command dispatch.
-#
-# Adding a command that maps 1:1 to an endpoint whose GET returns a
-# name => url hash (nodes, roles, ...) is just another `when` string above
-# the generic branch. Everything else goes through `get PATH`.
-
 require "option_parser"
 require "../utils/chef_api"
 
@@ -16,6 +10,8 @@ module Chefctl
       user = ENV["CHEF_USER"]?
       key = ENV["CHEF_KEY"]?
       verify_ssl = true
+      # OptionParser captures handler blocks, so they can't return from run;
+      # they set exit_early and run returns it after parsing.
       exit_early : Int32? = nil
 
       parser = OptionParser.new do |p|
@@ -41,7 +37,6 @@ module Chefctl
         p.on("--user NAME", "API user/client name (default: $CHEF_USER)") { |v| user = v }
         p.on("--key PATH", "client private key path (default: $CHEF_KEY)") { |v| key = v }
         p.on("--no-verify-ssl", "skip TLS certificate verification") { verify_ssl = false }
-        # OptionParser captures blocks, so we can't `return` from here.
         p.on("-h", "--help", "show help") { puts p; exit_early = 0 }
         p.on("-v", "--version", "print version") { puts VERSION; exit_early = 0 }
       end
@@ -65,7 +60,7 @@ module Chefctl
       when "version"
         puts VERSION
         0
-        # All of these GET a name => url hash at an endpoint of the same name.
+        # The command name is the endpoint, and each GET returns a name => url hash.
       when "nodes", "clients", "roles", "environments", "cookbooks"
         with_client(server, user, key, verify_ssl) do |chef|
           chef.get(command).as_h.each_key { |name| puts name }

@@ -1,20 +1,3 @@
-# --- Example ---
-# chef = Chef::Client.new("https://chef.example.com/organizations/myorg",
-#                         "myuser", "#{ENV["HOME"]}/.chef/myuser.pem")
-#
-# chef.get("nodes").as_h.each_key { |name| puts name }
-# node = chef.get("nodes/web01")
-# puts node["automatic"]["platform"]
-#
-# # Search
-# results = chef.get("search/node?q=platform:ubuntu&rows=100")
-#
-# # Update an attribute (read-modify-write the whole node object)
-# n = chef.get("nodes/web01").as_h
-# normal = n["normal"].as_h
-# normal["foo"] = JSON::Any.new("bar")
-# chef.put("nodes/web01", n)
-
 require "http/client"
 require "json"
 require "uri"
@@ -35,7 +18,7 @@ module Chef
     API_VERSION = "1"
 
     def initialize(@server_url : String, @client_name : String, key_path, @verify_ssl : Bool = true)
-      @uri = URI.parse(@server_url) # e.g. https://chef.example.com/organizations/myorg
+      @uri = URI.parse(@server_url)
       @key = OpenSSL::PKey::RSA.new(File.read(key_path))
     end
 
@@ -58,6 +41,7 @@ module Chef
     def request(method, path, body = "")
       full_path = canonical_path("#{@uri.path}/#{path}")
       query = nil
+      # The signature covers the path only; the query string rides along in the request URL.
       if idx = path.index('?')
         full_path = canonical_path("#{@uri.path}/#{path[0...idx]}")
         query = path[(idx + 1)..]
@@ -107,6 +91,7 @@ module Chef
       headers["X-Ops-Content-Hash"] = content_hash
       headers["X-Ops-Server-API-Version"] = API_VERSION
 
+      # The protocol carries the signature split across 60-char X-Ops-Authorization-N headers.
       signature.scan(/.{1,60}/).each_with_index do |m, i|
         headers["X-Ops-Authorization-#{i + 1}"] = m[0]
       end

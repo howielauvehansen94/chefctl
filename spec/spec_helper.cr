@@ -1,3 +1,3 @@
 require "spec"
-# Require the CLI module, not src/chefctl.cr: the entrypoint calls exit().
+# src/chefctl.cr calls exit at require time, so require the CLI directly.
 require "../src/chefctl/cli"
