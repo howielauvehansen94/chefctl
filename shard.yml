@@ -1,0 +1,17 @@
+name: chefctl
+version: 0.1.0
+
+authors:
+  - Håvard Lauve Hansen <h.l.h@posteo.no>
+
+targets:
+  chefctl:
+    main: src/chefctl.cr
+
+dependencies:
+  openssl_ext:
+    github: spider-gazelle/openssl_ext
+
+crystal: '>= 1.22.0-dev'
+
+license: MIT

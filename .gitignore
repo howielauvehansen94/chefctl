@@ -1,0 +1,6 @@
+.chef
+*.dwarf
+/.shards/
+/bin/
+/docs/
+/lib/
