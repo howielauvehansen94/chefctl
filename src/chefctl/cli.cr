@@ -11,7 +11,7 @@ module Chefctl
   VERSION = "0.1.0"
 
   class CLI
-    def self.run(argv : Array(String)) : Int32
+    def self.run(argv)
       server = ENV["CHEF_SERVER_URL"]?
       user = ENV["CHEF_USER"]?
       key = ENV["CHEF_KEY"]?
@@ -65,7 +65,7 @@ module Chefctl
       when "version"
         puts VERSION
         0
-      # All of these GET a name => url hash at an endpoint of the same name.
+        # All of these GET a name => url hash at an endpoint of the same name.
       when "nodes", "clients", "roles", "environments", "cookbooks"
         with_client(server, user, key, verify_ssl) do |chef|
           chef.get(command).as_h.each_key { |name| puts name }
@@ -108,8 +108,7 @@ module Chefctl
       1
     end
 
-    private def self.with_client(server : String?, user : String?, key : String?,
-                                verify_ssl : Bool, & : Chef::Client -> _)
+    private def self.with_client(server, user, key, verify_ssl, &)
       unless server && user && key
         STDERR.puts "missing config: set --server/--user/--key or $CHEF_SERVER_URL/$CHEF_USER/$CHEF_KEY"
         return 1

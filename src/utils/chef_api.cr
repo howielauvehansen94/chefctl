@@ -24,8 +24,9 @@ require "openssl_ext"
 
 module Chef
   class Error < Exception
-    getter status : Int32
-    def initialize(@status, body : String)
+    getter status
+
+    def initialize(@status : Int32, body)
       super("Chef API #{@status}: #{body}")
     end
   end
@@ -33,29 +34,28 @@ module Chef
   class Client
     API_VERSION = "1"
 
-    def initialize(@server_url : String, @client_name : String, key_path : String,
-                   @verify_ssl : Bool = true)
+    def initialize(@server_url : String, @client_name : String, key_path, @verify_ssl : Bool = true)
       @uri = URI.parse(@server_url) # e.g. https://chef.example.com/organizations/myorg
       @key = OpenSSL::PKey::RSA.new(File.read(key_path))
     end
 
-    def get(path : String)
+    def get(path)
       request("GET", path)
     end
 
-    def delete(path : String)
+    def delete(path)
       request("DELETE", path)
     end
 
-    def post(path : String, body : JSON::Any | Hash | NamedTuple)
+    def post(path, body : JSON::Any | Hash | NamedTuple)
       request("POST", path, body.to_json)
     end
 
-    def put(path : String, body : JSON::Any | Hash | NamedTuple)
+    def put(path, body : JSON::Any | Hash | NamedTuple)
       request("PUT", path, body.to_json)
     end
 
-    def request(method : String, path : String, body : String = "") : JSON::Any
+    def request(method, path, body = "")
       full_path = canonical_path("#{@uri.path}/#{path}")
       query = nil
       if idx = path.index('?')
@@ -64,8 +64,8 @@ module Chef
       end
 
       headers = HTTP::Headers{
-        "Accept"       => "application/json",
-        "Content-Type" => "application/json",
+        "Accept"         => "application/json",
+        "Content-Type"   => "application/json",
         "X-Chef-Version" => "18.0.0",
       }
       sign!(headers, method, full_path, body)
@@ -85,8 +85,8 @@ module Chef
       client.try &.close
     end
 
-    private def sign!(headers : HTTP::Headers, method : String, path : String, body : String)
-      timestamp    = Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")
+    private def sign!(headers, method, path, body)
+      timestamp = Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")
       content_hash = Base64.strict_encode(OpenSSL::Digest.new("SHA256").update(body).final)
 
       canonical = [
@@ -112,7 +112,7 @@ module Chef
       end
     end
 
-    private def canonical_path(p : String) : String
+    private def canonical_path(p)
       p = p.gsub(/\/+/, "/")
       p.size > 1 ? p.chomp("/") : p
     end
