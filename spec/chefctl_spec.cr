@@ -9,6 +9,11 @@ describe Chefctl::CLI do
     Chefctl::CLI.run(["frobnicate"]).should eq(1)
   end
 
+  it "pretty-prints node JSON with values beyond Int64 (sysconf ULONG_MAX)" do
+    json = %({"automatic": {"sysconf": {"ULONG_MAX": 18446744073709551615}}})
+    Chefctl::CLI.pretty_json(json).should contain(%("ULONG_MAX": 18446744073709551615))
+  end
+
   it "requires server config before contacting the API" do
     keys = {"CHEF_SERVER_URL", "CHEF_USER", "CHEF_KEY"}
     saved = keys.to_h { |k| {k, ENV[k]?} }

@@ -38,7 +38,18 @@ module Chef
       request("PUT", path, body.to_json)
     end
 
+    # Raw GET body, for payloads JSON.parse cannot represent (u64 attributes
+    # like automatic/sysconf/ULONG_MAX exceed Int64).
+    def get_raw(path)
+      perform("GET", path, "")
+    end
+
     def request(method, path, body = "")
+      raw = perform(method, path, body)
+      raw.empty? ? JSON::Any.new(nil) : JSON.parse(raw)
+    end
+
+    private def perform(method, path, body)
       full_path = canonical_path("#{@uri.path}/#{path}")
       query = nil
       # The signature covers the path only; the query string rides along in the request URL.
@@ -64,7 +75,7 @@ module Chef
       target = query ? "#{full_path}?#{query}" : full_path
       resp = client.exec(method, target, headers: headers, body: body.empty? ? nil : body)
       raise Error.new(resp.status_code, resp.body) unless resp.success?
-      resp.body.empty? ? JSON::Any.new(nil) : JSON.parse(resp.body)
+      resp.body
     ensure
       client.try &.close
     end
