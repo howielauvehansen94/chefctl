@@ -38,8 +38,6 @@ module Chef
       request("PUT", path, body.to_json)
     end
 
-    # Raw GET body, for payloads JSON.parse cannot represent (u64 attributes
-    # like automatic/sysconf/ULONG_MAX exceed Int64).
     def get_raw(path)
       perform("GET", path, "")
     end
@@ -50,9 +48,9 @@ module Chef
     end
 
     private def perform(method, path, body)
+      # Query string is excluded from the signed path but sent on the request.
       full_path = canonical_path("#{@uri.path}/#{path}")
       query = nil
-      # The signature covers the path only; the query string rides along in the request URL.
       if idx = path.index('?')
         full_path = canonical_path("#{@uri.path}/#{path[0...idx]}")
         query = path[(idx + 1)..]
@@ -84,6 +82,8 @@ module Chef
       timestamp = Time.utc.to_s("%Y-%m-%dT%H:%M:%SZ")
       content_hash = Base64.strict_encode(OpenSSL::Digest.new("SHA256").update(body).final)
 
+      # Chef API v1.3 signed-header authentication: the canonical string is
+      # RSA-signed and the result split across numbered headers.
       canonical = [
         "Method:#{method.upcase}",
         "Path:#{path}",
@@ -102,12 +102,15 @@ module Chef
       headers["X-Ops-Content-Hash"] = content_hash
       headers["X-Ops-Server-API-Version"] = API_VERSION
 
-      # The protocol carries the signature split across 60-char X-Ops-Authorization-N headers.
+      # Chef limits individual header line length, so the signature is split
+      # into 60-char chunks across numbered X-Ops-Authorization-N headers.
       signature.scan(/.{1,60}/).each_with_index do |m, i|
         headers["X-Ops-Authorization-#{i + 1}"] = m[0]
       end
     end
 
+    # The server normalizes the path before verifying the signature, so the
+    # signed path must match (collapse repeated slashes, strip trailing slash).
     private def canonical_path(p)
       p = p.gsub(/\/+/, "/")
       p.size > 1 ? p.chomp("/") : p
