@@ -1,4 +1,4 @@
-require "./utils/chef_api"
+require "chef-auth"
 require "./chefctl/cli"
 
 exit Chefctl::CLI.run(ARGV)

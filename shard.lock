@@ -1,5 +1,9 @@
 version: 2.0
 shards:
+  chef-auth:
+    git: https://github.com/howielauvehansen94/chef-auth.git
+    version: 0.1.0
+
   openssl_ext:
     git: https://github.com/spider-gazelle/openssl_ext.git
     version: 2.8.5

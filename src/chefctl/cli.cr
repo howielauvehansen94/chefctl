@@ -1,5 +1,5 @@
 require "option_parser"
-require "../utils/chef_api"
+require "chef-auth"
 
 module Chefctl
   VERSION = "0.1.0"

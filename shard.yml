@@ -9,8 +9,8 @@ targets:
     main: src/chefctl.cr
 
 dependencies:
-  openssl_ext:
-    github: spider-gazelle/openssl_ext
+  chef-auth:
+    github: howielauvehansen94/chef-auth
 
 crystal: '>= 1.22.0-dev'
 
