@@ -12,6 +12,6 @@ dependencies:
   chef-auth:
     github: howielauvehansen94/chef-auth
 
-crystal: '>= 1.22.0-dev'
+crystal: '>= 1.21.0'
 
 license: MIT
