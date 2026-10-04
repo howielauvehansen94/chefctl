@@ -2,7 +2,7 @@ require "option_parser"
 require "chef-auth"
 
 module Chefctl
-  VERSION = "0.1.0"
+  VERSION = "0.1.0" # x-release-please-version
 
   class CLI
     SUCCESS = 0

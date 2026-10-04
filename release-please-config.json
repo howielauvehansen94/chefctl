@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "package-name": "chefctl",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "shard.yml"
+        },
+        {
+          "type": "generic",
+          "path": "src/chefctl/cli.cr"
+        }
+      ]
+    }
+  }
+}
