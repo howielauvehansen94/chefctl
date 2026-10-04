@@ -9,6 +9,22 @@ describe Chefctl::CLI do
     Chefctl::CLI.run(["frobnicate"]).should eq(1)
   end
 
+  it "shows help for the --help flag" do
+    Chefctl::CLI.run(["--help"]).should eq(0)
+  end
+
+  it "prints usage when node is called without a name" do
+    Chefctl::CLI.run(["node"]).should eq(1)
+  end
+
+  it "prints usage when get is called without a path" do
+    Chefctl::CLI.run(["get"]).should eq(1)
+  end
+
+  it "reports unknown flags" do
+    Chefctl::CLI.run(["--frobnicate"]).should eq(1)
+  end
+
   it "pretty-prints node JSON with values beyond Int64 (sysconf ULONG_MAX)" do
     json = %({"automatic": {"sysconf": {"ULONG_MAX": 18446744073709551615}}})
     Chefctl::CLI.pretty_json(json).should contain(%("ULONG_MAX": 18446744073709551615))
