@@ -1,0 +1,39 @@
+name: Release artifacts
+
+on:
+  release:
+    types: [ published ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            archive: tar
+          - os: windows-latest
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: crystal-lang/install-crystal@v1
+    - name: Install dependencies
+      run: shards install
+    - name: Build
+      run: crystal build --release src/chefctl.cr -o bin/chefctl
+    - name: Package (tar)
+      if: matrix.archive == 'tar'
+      run: tar -czf "chefctl-${TAG}-linux-amd64.tar.gz" -C bin chefctl
+    - name: Package (zip)
+      if: matrix.archive == 'zip'
+      run: Compress-Archive -Path bin/chefctl.exe -DestinationPath "chefctl-${env:TAG}-windows-amd64.zip"
+    - name: Upload to release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: chefctl-*

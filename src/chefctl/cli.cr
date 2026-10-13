@@ -1,6 +1,7 @@
 require "option_parser"
 require "chef-auth"
 require "./json"
+require "./config"
 
 module Chefctl
   VERSION = "0.1.0" # x-release-please-version
@@ -8,25 +9,6 @@ module Chefctl
   class CLI
     SUCCESS = 0
     FAILURE = 1
-
-    private struct Config
-      property server : String?
-      property user : String?
-      property key : String?
-      property verify_ssl = true
-
-      def initialize
-        @server = ENV["CHEF_SERVER_URL"]?
-        @user = ENV["CHEF_USER"]?
-        @key = ENV["CHEF_KEY"]?
-      end
-
-      def credentials : {String, String, String}?
-        if (server = @server) && (user = @user) && (key = @key)
-          {server, user, key}
-        end
-      end
-    end
 
     getter parser : OptionParser
 
@@ -107,7 +89,7 @@ module Chefctl
     private def with_client(&)
       credentials = @config.credentials
       unless credentials
-        STDERR.puts "missing config: set --server/--user/--key or $CHEF_SERVER_URL/$CHEF_USER/$CHEF_KEY"
+        STDERR.puts "missing config: set --server/--user/--key or the CHEF_SERVER_URL, CHEF_USER and CHEF_KEY environment variables"
         return FAILURE
       end
       server, user, key = credentials
@@ -139,9 +121,9 @@ module Chefctl
           Flags:
           USAGE
 
-        parser.on("--server URL", "Chef server org URL (default: $CHEF_SERVER_URL)") { |v| @config.server = v }
-        parser.on("--user NAME", "API user/client name (default: $CHEF_USER)") { |v| @config.user = v }
-        parser.on("--key PATH", "client private key path (default: $CHEF_KEY)") { |v| @config.key = v }
+        parser.on("--server URL", "Chef server org URL (default: CHEF_SERVER_URL env)") { |v| @config.server = v }
+        parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |v| @config.user = v }
+        parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |v| @config.key = v }
         parser.on("--no-verify-ssl", "skip TLS certificate verification") { @config.verify_ssl = false }
         parser.on("-h", "--help", "show help") { puts parser; @exit_code = SUCCESS }
         parser.on("-v", "--version", "print version") { puts VERSION; @exit_code = SUCCESS }

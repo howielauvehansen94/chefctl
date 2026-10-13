@@ -26,13 +26,8 @@ describe Chefctl::CLI do
   end
 
   it "requires server config before contacting the API" do
-    keys = {"CHEF_SERVER_URL", "CHEF_USER", "CHEF_KEY"}
-    saved = keys.to_h { |k| {k, ENV[k]?} }
-    keys.each { |k| ENV.delete(k) }
-    begin
+    with_env({"CHEF_SERVER_URL" => nil, "CHEF_USER" => nil, "CHEF_KEY" => nil}) do
       Chefctl::CLI.run(["nodes"]).should eq(1)
-    ensure
-      saved.each { |k, v| v ? (ENV[k] = v) : ENV.delete(k) }
     end
   end
 end
