@@ -9,8 +9,6 @@ module Chefctl
     SUCCESS = 0
     FAILURE = 1
 
-    # Connection settings, gathered from environment variables and overridden
-    # by command-line flags.
     private struct Config
       property server : String?
       property user : String?
@@ -23,7 +21,6 @@ module Chefctl
         @key = ENV["CHEF_KEY"]?
       end
 
-      # The three values Chef::Client needs, or nil if any is missing.
       def credentials : {String, String, String}?
         if (server = @server) && (user = @user) && (key = @key)
           {server, user, key}
@@ -35,9 +32,6 @@ module Chefctl
 
     @config = Config.new
 
-    # OptionParser handler blocks cannot return from run, so the --help and
-    # --version handlers record the exit code here and run returns it after
-    # parsing finishes.
     @exit_code : Int32? = nil
 
     def initialize
@@ -59,7 +53,6 @@ module Chefctl
       FAILURE
     end
 
-    # Parses flags, then hands the remaining arguments to the matching command.
     def run(argv : Array(String)) : Int32
       args = argv.dup
       parser.parse(args)
@@ -101,8 +94,6 @@ module Chefctl
       end
     end
 
-    # The command name is the endpoint, and each listing endpoint returns a
-    # name => URL hash whose keys are the resource names.
     private def list_names(chef : Chef::Client, endpoint : String) : Int32
       chef.get(endpoint).as_h.each_key { |name| puts name }
       SUCCESS
