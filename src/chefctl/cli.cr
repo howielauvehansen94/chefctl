@@ -1,5 +1,6 @@
 require "option_parser"
 require "chef-auth"
+require "./json"
 
 module Chefctl
   VERSION = "0.1.0" # x-release-please-version
@@ -58,15 +59,6 @@ module Chefctl
       FAILURE
     end
 
-    # JSON.parse only holds Int64 and raises on u64 values Ohai reports
-    # (e.g. automatic/sysconf/ULONG_MAX), so display JSON is streamed raw
-    # through a pull parser instead of round-tripped through JSON::Any.
-    def self.pretty_json(body : String) : String
-      String.build do |io|
-        JSON.build(io, indent: "  ") { |b| JSON::PullParser.new(body).read_raw(b) }
-      end
-    end
-
     # Parses flags, then hands the remaining arguments to the matching command.
     def run(argv : Array(String)) : Int32
       args = argv.dup
@@ -117,7 +109,7 @@ module Chefctl
     end
 
     private def show_raw(chef : Chef::Client, path : String) : Int32
-      puts CLI.pretty_json(chef.get_raw(path))
+      puts JSON.pretty(chef.get_raw(path))
       SUCCESS
     end
 
