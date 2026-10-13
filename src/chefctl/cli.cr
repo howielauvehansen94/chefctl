@@ -4,7 +4,7 @@ require "./json"
 require "./config"
 
 module Chefctl
-  VERSION = "0.1.0" # x-release-please-version
+  VERSION = "0.2.0" # x-release-please-version
 
   class CLI
     SUCCESS = 0
