@@ -25,6 +25,14 @@ describe Chefctl::CLI do
     Chefctl::CLI.run(["--frobnicate"]).should eq(1)
   end
 
+  it "lets the last TLS flag win" do
+    cli = Chefctl::CLI.new
+    cli.parser.parse(["--no-verify-ssl"])
+    cli.@config.verify_ssl.should be_false
+    cli.parser.parse(["--verify-ssl"])
+    cli.@config.verify_ssl.should be_true
+  end
+
   it "requires server config before contacting the API" do
     with_env({"CHEF_SERVER_URL" => nil, "CHEF_USER" => nil, "CHEF_KEY" => nil}) do
       Chefctl::CLI.run(["nodes"]).should eq(1)

@@ -82,7 +82,7 @@ module Chefctl
     end
 
     private def show_raw(chef : Chef::Client, path : String) : Int32
-      puts JSON.pretty(chef.get_raw(path))
+      puts PrettyJSON.pretty(chef.get_raw(path))
       SUCCESS
     end
 
@@ -125,6 +125,7 @@ module Chefctl
         parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |v| @config.user = v }
         parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |v| @config.key = v }
         parser.on("--no-verify-ssl", "skip TLS certificate verification") { @config.verify_ssl = false }
+        parser.on("--verify-ssl", "verify TLS certificates (default)") { @config.verify_ssl = true }
         parser.on("-h", "--help", "show help") { puts parser; @exit_code = SUCCESS }
         parser.on("-v", "--version", "print version") { puts VERSION; @exit_code = SUCCESS }
       end
