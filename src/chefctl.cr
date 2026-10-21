@@ -1,4 +1,186 @@
-require "chef-auth"
-require "./chefctl/cli"
+# chefctl — a minimal Chef Infra Server CLI.
+#
+# Single-file layout, ordered inside-out by dependency:
+#
+#   1. PrettyJSON — turns raw API bodies into pretty-printed JSON
+#   2. Config    — resolves credentials from flags and the environment
+#   3. CLI       — flag parsing and command dispatch (uses the two above)
+#
+# The only entry point is `Chefctl::CLI.run`.
 
-exit Chefctl::CLI.run(ARGV)
+require "option_parser"
+require "json"
+require "chef-auth"
+
+module Chefctl
+  VERSION = "0.2.1" # x-release-please-version
+
+  # Pretty-prints JSON while preserving values beyond Int64 (e.g. sysconf
+  # ULONG_MAX), which `JSON.parse`-then-serialize would corrupt.
+  module PrettyJSON
+    def self.pretty(body : String) : String
+      return "" if body.blank?
+
+      String.build do |io|
+        ::JSON.build(io, indent: "  ") { |b| ::JSON::PullParser.new(body).read_raw(b) }
+      end
+    end
+  end
+
+  # Resolves Chef server credentials: CLI flags win over the CHEF_SERVER_URL,
+  # CHEF_USER and CHEF_KEY environment variables.
+  struct Config
+    property server : String?
+    property user : String?
+    property key : String?
+    property verify_ssl = true
+
+    def initialize
+      @server = ENV["CHEF_SERVER_URL"]?
+      @user = ENV["CHEF_USER"]?
+      @key = ENV["CHEF_KEY"]?
+    end
+
+    # `~` in the key path is expanded here because neither PowerShell nor
+    # cmd expand it themselves, and environment variable values are never
+    # expanded on any platform.
+    def credentials : {String, String, String}?
+      if (server = @server) && (user = @user) && (key = @key)
+        {server, user, Path[key].expand(home: true).to_s}
+      end
+    end
+  end
+
+  class CLI
+    SUCCESS = 0
+    FAILURE = 1
+
+    getter parser : OptionParser
+
+    @config = Config.new
+
+    @exit_code : Int32? = nil
+
+    def initialize
+      @parser = build_parser
+    end
+
+    def self.run(argv) : Int32
+      cli = new
+      cli.run(argv)
+    rescue ex : Chef::Error
+      STDERR.puts ex.message
+      FAILURE
+    rescue ex : OptionParser::Exception
+      STDERR.puts ex.message || "invalid option"
+      STDERR.puts new.parser
+      FAILURE
+    rescue ex
+      STDERR.puts "error: #{ex.message}"
+      FAILURE
+    end
+
+    def run(argv : Array(String)) : Int32
+      args = argv.dup
+      parser.parse(args)
+      if exit_code = @exit_code
+        return exit_code
+      end
+
+      command = args.shift?
+      unless command
+        puts parser
+        return FAILURE
+      end
+
+      dispatch(command, args)
+    end
+
+    private def dispatch(command : String, args : Array(String)) : Int32
+      case command
+      when "help"
+        puts parser
+        SUCCESS
+      when "version"
+        puts VERSION
+        SUCCESS
+      when "nodes", "clients", "roles", "environments", "cookbooks"
+        with_client { |chef| list_names(chef, command) }
+      when "node", "client"
+        name = args.shift?
+        return usage_error("usage: chefctl #{command} NAME") unless name
+        with_client { |chef| show_raw(chef, "#{command}s/#{name}") }
+      when "get"
+        path = args.shift?
+        return usage_error(%(usage: chefctl get PATH  # org-relative, e.g. search/node?q=platform:ubuntu)) unless path
+        with_client { |chef| show_raw(chef, path) }
+      else
+        STDERR.puts "unknown command: #{command}"
+        STDERR.puts parser
+        FAILURE
+      end
+    end
+
+    private def list_names(chef : Chef::Client, endpoint : String) : Int32
+      chef.get(endpoint).as_h.each_key { |name| puts name }
+      SUCCESS
+    end
+
+    private def show_raw(chef : Chef::Client, path : String) : Int32
+      puts PrettyJSON.pretty(chef.get_raw(path))
+      SUCCESS
+    end
+
+    private def with_client(&)
+      credentials = @config.credentials
+      unless credentials
+        STDERR.puts "missing config: set --server/--user/--key or the CHEF_SERVER_URL, CHEF_USER and CHEF_KEY environment variables"
+        return FAILURE
+      end
+      server, user, key = credentials
+      yield Chef::Client.new(server, user, key, @config.verify_ssl)
+    end
+
+    private def usage_error(message : String) : Int32
+      STDERR.puts message
+      FAILURE
+    end
+
+    private def build_parser : OptionParser
+      OptionParser.new do |parser|
+        parser.banner = <<-USAGE
+          Usage: chefctl [flags] <command> [args]
+
+          Commands:
+            nodes          list node names
+            node NAME      show a node (pretty JSON)
+            clients        list client names
+            client NAME    show a client (pretty JSON)
+            roles          list role names
+            environments   list environment names
+            cookbooks      list cookbook names
+            get PATH       raw GET, org-relative, e.g. "search/node?q=platform:ubuntu"
+            version        print version
+            help           show this help
+
+          Flags:
+          USAGE
+
+        parser.on("--server URL", "Chef server org URL (default: CHEF_SERVER_URL env)") { |v| @config.server = v }
+        parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |v| @config.user = v }
+        parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |v| @config.key = v }
+        parser.on("--no-verify-ssl", "skip TLS certificate verification") { @config.verify_ssl = false }
+        parser.on("--verify-ssl", "verify TLS certificates (default)") { @config.verify_ssl = true }
+        parser.on("-h", "--help", "show help") { puts parser; @exit_code = SUCCESS }
+        parser.on("-v", "--version", "print version") { puts VERSION; @exit_code = SUCCESS }
+      end
+    end
+  end
+end
+
+# Entry point. Guarded so the spec suite can require this file (its
+# spec_helper requires "spec" first, which defines the top-level `Spec`)
+# without the `exit` killing the spec run.
+{% unless @top_level.has_constant?("Spec") %}
+  exit Chefctl::CLI.run(ARGV)
+{% end %}

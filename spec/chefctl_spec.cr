@@ -1,4 +1,64 @@
-require "./spec_helper"
+# chefctl specs. Single file, mirroring src/chefctl.cr: the describe blocks
+# appear in the same inside-out order as the modules they cover
+# (PrettyJSON, then Config, then CLI), with shared helpers at the top.
+
+require "spec"
+require "../src/chefctl"
+
+def with_env(overrides : Hash(String, String | Nil), &)
+  saved = overrides.keys.to_h { |key| {key, ENV[key]?} }
+  overrides.each { |key, value| value ? (ENV[key] = value) : ENV.delete(key) }
+  begin
+    yield
+  ensure
+    saved.each { |key, value| value ? (ENV[key] = value) : ENV.delete(key) }
+  end
+end
+
+describe Chefctl::PrettyJSON do
+  it "pretty-prints JSON with values beyond Int64 (sysconf ULONG_MAX)" do
+    json = %({"automatic": {"sysconf": {"ULONG_MAX": 18446744073709551615}}})
+    Chefctl::PrettyJSON.pretty(json).should contain(%("ULONG_MAX": 18446744073709551615))
+  end
+
+  it "returns an empty string for an empty or whitespace-only body" do
+    Chefctl::PrettyJSON.pretty("").should eq("")
+    Chefctl::PrettyJSON.pretty("   \n").should eq("")
+  end
+end
+
+describe Chefctl::Config do
+  server = "https://chef.example.com/organizations/myorg"
+
+  it "reads credentials from the environment" do
+    with_env({"CHEF_SERVER_URL" => server, "CHEF_USER" => "admin", "CHEF_KEY" => "~"}) do
+      Chefctl::Config.new.credentials.should eq({server, "admin", Path.home.to_s})
+    end
+  end
+
+  it "expands ~ in the key path against the user's home directory" do
+    with_env({"CHEF_SERVER_URL" => server, "CHEF_USER" => "admin", "CHEF_KEY" => "~/.chef/admin.pem"}) do
+      key = (Path.home / ".chef" / "admin.pem").to_s
+      Chefctl::Config.new.credentials.should eq({server, "admin", key})
+    end
+  end
+
+  it "prefers values assigned after construction" do
+    with_env({"CHEF_SERVER_URL" => server, "CHEF_USER" => "admin", "CHEF_KEY" => "~/.chef/ignored.pem"}) do
+      config = Chefctl::Config.new
+      config.user = "client"
+      config.key = "client.pem"
+      key = Path["client.pem"].expand.to_s
+      config.credentials.should eq({server, "client", key})
+    end
+  end
+
+  it "returns nil unless server, user, and key are all set" do
+    with_env({"CHEF_USER" => "admin"}) do
+      Chefctl::Config.new.credentials.should be_nil
+    end
+  end
+end
 
 describe Chefctl::CLI do
   it "runs version without touching the network" do
