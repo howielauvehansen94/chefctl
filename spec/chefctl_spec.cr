@@ -129,8 +129,25 @@ describe Chefctl::CLI do
     Chefctl::CLI.run(["--help"]).should eq(0)
   end
 
-  it "prints usage when node is called without a name" do
-    Chefctl::CLI.run(["node"]).should eq(1)
+  it "prints usage when get is called without a resource" do
+    Chefctl::CLI.run(["get"]).should eq(1)
+  end
+
+  it "rejects unknown resources" do
+    Chefctl::CLI.run(["get", "frobnicate"]).should eq(1)
+    Chefctl::CLI.run(["create", "frobnicate", "web01"]).should eq(1)
+  end
+
+  it "prints usage when create, update, or delete is called without a name" do
+    Chefctl::CLI.run(["create", "node"]).should eq(1)
+    Chefctl::CLI.run(["update", "node"]).should eq(1)
+    Chefctl::CLI.run(["delete", "node"]).should eq(1)
+  end
+
+  it "rejects create, update, and delete for cookbooks" do
+    Chefctl::CLI.run(["create", "cookbook", "apt"]).should eq(1)
+    Chefctl::CLI.run(["update", "cookbook", "apt"]).should eq(1)
+    Chefctl::CLI.run(["delete", "cookbook", "apt"]).should eq(1)
   end
 
   it "prints usage when get is called without a path" do
@@ -165,12 +182,14 @@ describe Chefctl::CLI do
   end
 
   it "rejects unknown formats before contacting the API" do
-    Chefctl::CLI.run(["-F", "xml", "nodes"]).should eq(1)
+    Chefctl::CLI.run(["-F", "xml", "get", "nodes"]).should eq(1)
   end
 
   it "requires server config before contacting the API" do
     with_env({"CHEF_SERVER_URL" => nil, "CHEF_USER" => nil, "CHEF_KEY" => nil}) do
-      Chefctl::CLI.run(["nodes"]).should eq(1)
+      Chefctl::CLI.run(["get", "nodes"]).should eq(1)
+      Chefctl::CLI.run(["get", "node", "web01"]).should eq(1)
+      Chefctl::CLI.run(["delete", "node", "web01"]).should eq(1)
     end
   end
 end

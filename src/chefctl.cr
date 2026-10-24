@@ -152,6 +152,7 @@ module Chefctl
 
     @format = Output::Format::Json
     @format_error : String? = nil
+    @body_file : String? = nil
 
     @exit_code : Int32? = nil
 
@@ -204,21 +205,132 @@ module Chefctl
       when "version"
         puts VERSION
         SUCCESS
-      when "nodes", "clients", "roles", "environments", "cookbooks"
-        with_client { |chef| list_names(chef, command) }
-      when "node", "client"
-        name = args.shift?
-        return usage_error("usage: chefctl #{command} NAME") unless name
-        with_client { |chef| show_raw(chef, "#{command}s/#{name}") }
       when "get"
-        path = args.shift?
-        return usage_error(%(usage: chefctl get PATH  # org-relative, e.g. search/node?q=platform:ubuntu)) unless path
-        with_client { |chef| show_raw(chef, path) }
+        get(args)
+      when "create", "update", "delete"
+        mutate(command, args)
       else
         STDERR.puts "unknown command: #{command}"
         STDERR.puts parser
         FAILURE
       end
+    end
+
+    RESOURCES = %w[node client role environment cookbook]
+
+    private def singular_resource(word : String) : String?
+      RESOURCES.find { |resource| word == resource || word == "#{resource}s" }
+    end
+
+    private def get(args : Array(String)) : Int32
+      resource = args.shift?
+      unless resource
+        return usage_error(<<-USAGE.chomp)
+          usage: chefctl get <resource> [NAME]
+                 chefctl get PATH   # org-relative, e.g. search/node?q=platform:ubuntu
+          USAGE
+      end
+
+      if resource.includes?("/") || resource.includes?("?")
+        return usage_error("usage: chefctl get PATH") unless args.empty?
+        return with_client { |chef| show_raw(chef, resource) }
+      end
+
+      singular = singular_resource(resource)
+      unless singular
+        return usage_error(%(unknown resource "#{resource}", expected one of: #{RESOURCES.join(", ")}))
+      end
+
+      name = args.shift?
+      if name
+        return usage_error("usage: chefctl get #{singular} NAME") unless args.empty?
+        with_client { |chef| show_raw(chef, "#{singular}s/#{name}") }
+      else
+        with_client { |chef| list_names(chef, "#{singular}s") }
+      end
+    end
+
+    private def mutate(verb : String, args : Array(String)) : Int32
+      resource = args.shift?
+      return usage_error("usage: chefctl #{verb} <resource> NAME") unless resource
+
+      singular = singular_resource(resource)
+      unless singular
+        return usage_error(%(unknown resource "#{resource}", expected one of: #{RESOURCES.join(", ")}))
+      end
+
+      name = args.shift?
+      return usage_error("usage: chefctl #{verb} #{singular} NAME") unless name
+      return usage_error("usage: chefctl #{verb} #{singular} NAME") unless args.empty?
+
+      if singular == "cookbook"
+        return usage_error("#{verb} cookbook is not supported; upload cookbooks with knife or chef-client")
+      end
+
+      path = verb == "create" ? "#{singular}s" : "#{singular}s/#{name}"
+
+      if verb == "delete"
+        return with_client do |chef|
+          print_body(chef.delete(path))
+          SUCCESS
+        end
+      end
+
+      body = read_json_body(singular, name, verb)
+      return FAILURE unless body
+
+      with_client do |chef|
+        print_body(verb == "create" ? chef.post(path, body) : chef.put(path, body))
+        SUCCESS
+      end
+    end
+
+    private def read_json_body(resource : String, name : String, verb : String) : JSON::Any?
+      raw = nil
+      if file = @body_file
+        raw = file == "-" ? STDIN.gets_to_end : File.read(file)
+      elsif !STDIN.tty?
+        raw = STDIN.gets_to_end
+      end
+
+      if raw.nil? || raw.blank?
+        if verb == "create" && resource == "node"
+          raw = %({"name":#{name.inspect},"chef_type":"node","json_class":"Chef::Node","run_list":[]})
+        else
+          STDERR.puts "no JSON body: pass --file FILE (or -) or pipe JSON on stdin"
+          return
+        end
+      end
+
+      begin
+        json = JSON.parse(raw)
+      rescue ex : JSON::ParseException
+        STDERR.puts "error: invalid JSON body: #{ex.message}"
+        return
+      end
+
+      unless object = json.as_h?
+        STDERR.puts "error: JSON body must be an object"
+        return
+      end
+
+      if existing = json["name"]?
+        if existing.as_s? != name
+          STDERR.puts %(error: body name "#{existing}" does not match #{resource} name "#{name}")
+          return
+        end
+      else
+        merged = {"name" => JSON::Any.new(name)}
+        object.each { |key, value| merged[key] = value }
+        json = JSON::Any.new(merged)
+      end
+
+      json
+    end
+
+    private def print_body(result : JSON::Any) : Nil
+      rendered = PrettyJSON.pretty(result.to_json)
+      puts rendered unless rendered.blank? || rendered == "null"
     end
 
     private def list_names(chef : Chef::Client, endpoint : String) : Int32
@@ -258,19 +370,27 @@ module Chefctl
     private def build_parser : OptionParser
       OptionParser.new do |parser|
         parser.banner = <<-USAGE
-          Usage: chefctl [flags] <command> [args]
+          Usage: chefctl [flags] <command> <resource> [NAME]
+
+          Resources: node, client, role, environment, cookbook
+          (plural forms list names: chefctl get nodes)
 
           Commands:
-            nodes          list node names
-            node NAME      show a node
-            clients        list client names
-            client NAME    show a client
-            roles          list role names
-            environments   list environment names
-            cookbooks      list cookbook names
-            get PATH       raw GET, org-relative, e.g. "search/node?q=platform:ubuntu"
-            version        print version
-            help           show this help
+            get <resource> [NAME]   list names, or show one object
+            get PATH                raw GET, org-relative, e.g. "search/node?q=platform:ubuntu"
+            create <resource> NAME  create an object (JSON body: --file or stdin)
+            update <resource> NAME  update an object (JSON body: --file or stdin)
+            delete <resource> NAME  delete an object
+            version                 print version
+            help                    show this help
+
+          Examples:
+            chefctl get nodes
+            chefctl get node web01.example.com
+            chefctl create node web01.example.com
+            chefctl get node web01.example.com > web01.json
+            chefctl update node web01.example.com --file web01.json
+            chefctl delete node web01.example.com
 
           Flags:
           USAGE
@@ -278,6 +398,7 @@ module Chefctl
         parser.on("--server URL", "Chef server org URL (default: CHEF_SERVER_URL env)") { |value| @config.server = value }
         parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |value| @config.user = value }
         parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |value| @config.key = value }
+        parser.on("-f FILE", "--file FILE", "JSON body for create/update; - reads stdin") { |value| @body_file = value }
         parser.on("-F FORMAT", "--format FORMAT", "output format: json or yaml (default: json)") { |value| set_format(value) }
         parser.on("--no-verify-ssl", "skip TLS certificate verification") { @config.verify_ssl = false }
         parser.on("--verify-ssl", "verify TLS certificates (default)") { @config.verify_ssl = true }
