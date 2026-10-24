@@ -1,13 +1,3 @@
-# chefctl — a minimal Chef Infra Server CLI.
-#
-# Single-file layout, ordered inside-out by dependency:
-#
-#   1. PrettyJSON — turns raw API bodies into pretty-printed JSON
-#   2. Config    — resolves credentials from flags and the environment
-#   3. CLI       — flag parsing and command dispatch (uses the two above)
-#
-# The only entry point is `Chefctl::CLI.run`.
-
 require "option_parser"
 require "json"
 require "chef-auth"
@@ -15,8 +5,6 @@ require "chef-auth"
 module Chefctl
   VERSION = "0.2.1" # x-release-please-version
 
-  # Pretty-prints JSON while preserving values beyond Int64 (e.g. sysconf
-  # ULONG_MAX), which `JSON.parse`-then-serialize would corrupt.
   module PrettyJSON
     def self.pretty(body : String) : String
       return "" if body.blank?
@@ -27,8 +15,6 @@ module Chefctl
     end
   end
 
-  # Resolves Chef server credentials: CLI flags win over the CHEF_SERVER_URL,
-  # CHEF_USER and CHEF_KEY environment variables.
   struct Config
     property server : String?
     property user : String?
@@ -41,9 +27,6 @@ module Chefctl
       @key = ENV["CHEF_KEY"]?
     end
 
-    # `~` in the key path is expanded here because neither PowerShell nor
-    # cmd expand it themselves, and environment variable values are never
-    # expanded on any platform.
     def credentials : {String, String, String}?
       if (server = @server) && (user = @user) && (key = @key)
         {server, user, Path[key].expand(home: true).to_s}
@@ -66,23 +49,25 @@ module Chefctl
     end
 
     def self.run(argv) : Int32
-      cli = new
-      cli.run(argv)
+      new.run(argv)
     rescue ex : Chef::Error
       STDERR.puts ex.message
       FAILURE
-    rescue ex : OptionParser::Exception
-      STDERR.puts ex.message || "invalid option"
-      STDERR.puts new.parser
-      FAILURE
     rescue ex
-      STDERR.puts "error: #{ex.message}"
+      STDERR.puts "error: #{ex.message || ex.class.name}"
       FAILURE
     end
 
     def run(argv : Array(String)) : Int32
       args = argv.dup
-      parser.parse(args)
+      begin
+        parser.parse(args)
+      rescue ex : OptionParser::Exception
+        STDERR.puts ex.message || "invalid option"
+        STDERR.puts parser
+        return FAILURE
+      end
+
       if exit_code = @exit_code
         return exit_code
       end
@@ -178,9 +163,6 @@ module Chefctl
   end
 end
 
-# Entry point. Guarded so the spec suite can require this file (its
-# spec_helper requires "spec" first, which defines the top-level `Spec`)
-# without the `exit` killing the spec run.
 {% unless @top_level.has_constant?("Spec") %}
   exit Chefctl::CLI.run(ARGV)
 {% end %}

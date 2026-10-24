@@ -1,7 +1,3 @@
-# chefctl specs. Single file, mirroring src/chefctl.cr: the describe blocks
-# appear in the same inside-out order as the modules they cover
-# (PrettyJSON, then Config, then CLI), with shared helpers at the top.
-
 require "spec"
 require "../src/chefctl"
 
