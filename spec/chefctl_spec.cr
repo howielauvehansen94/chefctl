@@ -1,7 +1,7 @@
 require "spec"
 require "../src/chefctl"
 
-def with_env(overrides : Hash(String, String | Nil), &)
+def with_env(overrides : Hash(String, String?), &)
   saved = overrides.keys.to_h { |key| {key, ENV[key]?} }
   overrides.each { |key, value| value ? (ENV[key] = value) : ENV.delete(key) }
   begin
@@ -84,9 +84,9 @@ describe Chefctl::CLI do
   it "lets the last TLS flag win" do
     cli = Chefctl::CLI.new
     cli.parser.parse(["--no-verify-ssl"])
-    cli.@config.verify_ssl.should be_false
+    cli.@config.verify_ssl?.should be_false
     cli.parser.parse(["--verify-ssl"])
-    cli.@config.verify_ssl.should be_true
+    cli.@config.verify_ssl?.should be_true
   end
 
   it "requires server config before contacting the API" do

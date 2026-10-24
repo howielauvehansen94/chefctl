@@ -7,6 +7,18 @@ on:
     branches: [ "main" ]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: crystal-lang/install-crystal@v1
+    - name: Install dependencies
+      run: shards install
+    - name: Check formatting
+      run: crystal tool format --check src spec
+    - name: Run ameba
+      run: crystal build lib/ameba/bin/ameba.cr -o bin/ameba && bin/ameba
+
   spec:
     strategy:
       fail-fast: false

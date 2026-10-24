@@ -10,7 +10,7 @@ module Chefctl
       return "" if body.blank?
 
       String.build do |io|
-        ::JSON.build(io, indent: "  ") { |b| ::JSON::PullParser.new(body).read_raw(b) }
+        ::JSON.build(io, indent: "  ") { |builder| ::JSON::PullParser.new(body).read_raw(builder) }
       end
     end
   end
@@ -19,7 +19,7 @@ module Chefctl
     property server : String?
     property user : String?
     property key : String?
-    property verify_ssl = true
+    property? verify_ssl = true
 
     def initialize
       @server = ENV["CHEF_SERVER_URL"]?
@@ -48,7 +48,7 @@ module Chefctl
       @parser = build_parser
     end
 
-    def self.run(argv) : Int32
+    def self.run(argv : Array(String)) : Int32
       new.run(argv)
     rescue ex : Chef::Error
       STDERR.puts ex.message
@@ -123,7 +123,7 @@ module Chefctl
         return FAILURE
       end
       server, user, key = credentials
-      yield Chef::Client.new(server, user, key, @config.verify_ssl)
+      yield Chef::Client.new(server, user, key, @config.verify_ssl?)
     end
 
     private def usage_error(message : String) : Int32
@@ -151,9 +151,9 @@ module Chefctl
           Flags:
           USAGE
 
-        parser.on("--server URL", "Chef server org URL (default: CHEF_SERVER_URL env)") { |v| @config.server = v }
-        parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |v| @config.user = v }
-        parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |v| @config.key = v }
+        parser.on("--server URL", "Chef server org URL (default: CHEF_SERVER_URL env)") { |value| @config.server = value }
+        parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |value| @config.user = value }
+        parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |value| @config.key = value }
         parser.on("--no-verify-ssl", "skip TLS certificate verification") { @config.verify_ssl = false }
         parser.on("--verify-ssl", "verify TLS certificates (default)") { @config.verify_ssl = true }
         parser.on("-h", "--help", "show help") { puts parser; @exit_code = SUCCESS }

@@ -12,6 +12,11 @@ dependencies:
   chef-auth:
     github: howielauvehansen94/chef-auth
 
+development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
+    version: ~> 1.7.0
+
 crystal: '>= 1.21.0'
 
 license: MIT
