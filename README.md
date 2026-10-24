@@ -29,6 +29,11 @@ Run `chefctl --help` for all commands and flags. The `get` command hits any
 org-relative endpoint, so search, data bags (`get data`), etc. work without
 dedicated commands.
 
+Pass `-F json` or `-F yaml` for machine-readable output: name lists render as
+collections and `node`, `client` and `get` render as documents, e.g.
+
+    chefctl -F yaml node web01.example.com
+
 `--key` and `CHEF_KEY` accept `~`, which chefctl expands itself, so
 `--key ~/.chef/myuser.pem` works the same in PowerShell and cmd as in POSIX
 shells.

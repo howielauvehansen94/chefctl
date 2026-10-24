@@ -1,5 +1,6 @@
 require "option_parser"
 require "json"
+require "yaml"
 require "chef-auth"
 
 module Chefctl
@@ -11,6 +12,113 @@ module Chefctl
 
       String.build do |io|
         ::JSON.build(io, indent: "  ") { |builder| ::JSON::PullParser.new(body).read_raw(builder) }
+      end
+    end
+  end
+
+  module Output
+    enum Format
+      Json
+      Yaml
+
+      def self.parse?(value : String) : Format?
+        case value
+        when "json" then Json
+        when "yaml" then Yaml
+        end
+      end
+    end
+
+    def self.body(body : String, format : Format) : String
+      return "" if body.blank?
+
+      case format
+      in .json? then PrettyJSON.pretty(body)
+      in .yaml? then json_to_yaml(body)
+      end
+    end
+
+    def self.names(names : Array(String), format : Format) : String
+      case format
+      in .json? then json_names(names)
+      in .yaml? then yaml_names(names)
+      end
+    end
+
+    private def self.json_names(names : Array(String)) : String
+      String.build do |io|
+        ::JSON.build(io, indent: "  ") do |builder|
+          builder.array do
+            names.each { |name| builder.string(name) }
+          end
+        end
+      end
+    end
+
+    private def self.yaml_names(names : Array(String)) : String
+      String.build do |io|
+        YAML.build(io) do |yaml|
+          yaml.sequence do
+            names.each { |name| yaml_string(name, yaml) }
+          end
+        end
+      end
+    end
+
+    private def self.json_to_yaml(body : String) : String
+      String.build do |io|
+        YAML.build(io) { |yaml| walk_yaml(::JSON::PullParser.new(body), yaml) }
+      end
+    end
+
+    private def self.walk_yaml(pull : ::JSON::PullParser, yaml : YAML::Builder) : Nil
+      case pull.kind
+      when .null?
+        pull.read_next
+        yaml.scalar("null", style: YAML::ScalarStyle::PLAIN)
+      when .bool?
+        yaml.scalar(pull.read_bool)
+      when .int?
+        yaml_int(pull.read_raw, yaml)
+      when .float?
+        yaml.scalar(pull.read_float)
+      when .string?
+        yaml_string(pull.read_string, yaml)
+      when .begin_array?
+        yaml.sequence do
+          pull.read_begin_array
+          until pull.kind.end_array?
+            walk_yaml(pull, yaml)
+          end
+          pull.read_end_array
+        end
+      when .begin_object?
+        yaml.mapping do
+          pull.read_begin_object
+          until pull.kind.end_object?
+            yaml_string(pull.read_object_key, yaml)
+            walk_yaml(pull, yaml)
+          end
+          pull.read_end_object
+        end
+      else
+        raise ::JSON::ParseException.new("unexpected JSON kind: #{pull.kind}", 0, 0)
+      end
+    end
+
+    private def self.yaml_string(value : String, yaml : YAML::Builder) : Nil
+      if YAML::Schema::Core.reserved_string?(value)
+        yaml.scalar(value, style: YAML::ScalarStyle::DOUBLE_QUOTED)
+      else
+        yaml.scalar(value)
+      end
+    end
+
+    private def self.yaml_int(raw : String, yaml : YAML::Builder) : Nil
+      if value = raw.to_i64?
+        yaml.scalar(value)
+      else
+        yaml.scalar(raw, style: YAML::ScalarStyle::PLAIN)
       end
     end
   end
@@ -42,6 +150,9 @@ module Chefctl
 
     @config = Config.new
 
+    @format = Output::Format::Json
+    @format_error : String? = nil
+
     @exit_code : Int32? = nil
 
     def initialize
@@ -66,6 +177,10 @@ module Chefctl
         STDERR.puts ex.message || "invalid option"
         STDERR.puts parser
         return FAILURE
+      end
+
+      if error = @format_error
+        return usage_error(error)
       end
 
       if exit_code = @exit_code
@@ -107,12 +222,13 @@ module Chefctl
     end
 
     private def list_names(chef : Chef::Client, endpoint : String) : Int32
-      chef.get(endpoint).as_h.each_key { |name| puts name }
+      puts Output.names(chef.get(endpoint).as_h.keys, @format)
       SUCCESS
     end
 
     private def show_raw(chef : Chef::Client, path : String) : Int32
-      puts PrettyJSON.pretty(chef.get_raw(path))
+      output = Output.body(chef.get_raw(path), @format)
+      puts output unless output.empty?
       SUCCESS
     end
 
@@ -131,6 +247,14 @@ module Chefctl
       FAILURE
     end
 
+    private def set_format(value : String) : Nil
+      if format = Output::Format.parse?(value)
+        @format = format
+      else
+        @format_error = %(invalid format "#{value}", expected "json" or "yaml")
+      end
+    end
+
     private def build_parser : OptionParser
       OptionParser.new do |parser|
         parser.banner = <<-USAGE
@@ -138,9 +262,9 @@ module Chefctl
 
           Commands:
             nodes          list node names
-            node NAME      show a node (pretty JSON)
+            node NAME      show a node
             clients        list client names
-            client NAME    show a client (pretty JSON)
+            client NAME    show a client
             roles          list role names
             environments   list environment names
             cookbooks      list cookbook names
@@ -154,6 +278,7 @@ module Chefctl
         parser.on("--server URL", "Chef server org URL (default: CHEF_SERVER_URL env)") { |value| @config.server = value }
         parser.on("--user NAME", "API user/client name (default: CHEF_USER env)") { |value| @config.user = value }
         parser.on("--key PATH", "client private key path (default: CHEF_KEY env)") { |value| @config.key = value }
+        parser.on("-F FORMAT", "--format FORMAT", "output format: json or yaml (default: json)") { |value| set_format(value) }
         parser.on("--no-verify-ssl", "skip TLS certificate verification") { @config.verify_ssl = false }
         parser.on("--verify-ssl", "verify TLS certificates (default)") { @config.verify_ssl = true }
         parser.on("-h", "--help", "show help") { puts parser; @exit_code = SUCCESS }
