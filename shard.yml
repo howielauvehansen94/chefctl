@@ -1,5 +1,5 @@
 name: chefctl
-version: 0.2.1 # x-release-please-version
+version: 1.0.0 # x-release-please-version
 
 authors:
   - Håvard Lauve Hansen <h.l.h@posteo.no>
